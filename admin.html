@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #09070d;
+      --surface: rgba(255, 255, 255, 0.06);
+      --border: rgba(232, 0, 28, 0.25);
+      --accent: #ff3c00;
+      --accent-soft: rgba(255, 60, 0, 0.12);
+      --text: #f5f5f5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; }
+    body { display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { width: 100%; max-width: 450px; background: rgba(10, 7, 14, .96); border: 1px solid rgba(255,255,255,.06); border-radius: 22px; padding: 30px; box-shadow: 0 20px 80px rgba(0,0,0,.35); }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .brand h1 { font-size: 24px; letter-spacing: 2px; text-transform: uppercase; }
+    .brand small { color: rgba(255,255,255,.45); font-size: 12px; letter-spacing: 1px; }
+    .panel-label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.45); margin: 22px 0 8px; }
+    .input, .textarea { width: 100%; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.03); color: #fff; padding: 14px 16px; font-size: 14px; outline: none; }
+    .textarea { min-height: 120px; resize: vertical; }
+    .button { width: 100%; margin-top: 18px; padding: 14px 0; border: none; border-radius: 14px; background: linear-gradient(135deg, var(--accent), #ff6a00); color: #fff; font-weight: 800; letter-spacing: 1px; cursor: pointer; transition: transform .2s, box-shadow .2s; }
+    .button:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(255, 60, 0, .25); }
+    .note { margin-top: 18px; font-size: 12px; line-height: 1.6; color: rgba(255,255,255,.65); }
+    .link-row { display: flex; justify-content: space-between; gap: 10px; margin-top: 22px; }
+    .link { flex: 1; text-align: center; padding: 12px 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 14px; color: #fff; text-decoration: none; font-size: 13px; }
+    .success { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(45, 255, 126, .12); color: #d5ffcc; border: 1px solid rgba(45,255,126,.25); display: none; }
+    .error { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 96, 96, .12); color: #ffb3b3; border: 1px solid rgba(255,96,96,.25); display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div>
+        <h1>Admin Panel</h1>
+        <small>Change bot access code</small>
+      </div>
+    </div>
+
+    <div class="panel-label">Admin Password</div>
+    <input id="adminPass" class="input" type="password" placeholder="Enter admin password" autocomplete="off" />
+
+    <div class="panel-label">Current Access Token / WS URL</div>
+    <textarea id="accessToken" class="textarea" placeholder="Paste the full WS URL or access token here"></textarea>
+
+    <button id="saveBtn" class="button">Save Access Code</button>
+
+    <div id="successMessage" class="success">Saved successfully. Your bot will use the new token on next load.</div>
+    <div id="errorMessage" class="error"></div>
+
+    <div class="note">
+      Use this page to update the token only. If the main page shows <strong>"Message admin to reconnect your bot"</strong>, update the access code here.
+    </div>
+
+    <div class="link-row">
+      <a href="index.html" class="link">Back to Dashboard</a>
+      <a href="https://wa.me/2348063804264" target="_blank" rel="noopener" class="link">Contact WhatsApp</a>
+    </div>
+  </div>
+
+  <script>
+    const ADMIN_PASSWORD = 'melbetadmin2026';
+    const passInput = document.getElementById('adminPass');
+    const tokenInput = document.getElementById('accessToken');
+    const saveBtn = document.getElementById('saveBtn');
+    const successMessage = document.getElementById('successMessage');
+    const errorMessage = document.getElementById('errorMessage');
+
+    function extractToken(raw) {
+      raw = raw.trim();
+      if (!raw) return '';
+      if (raw.startsWith('wss://') || raw.startsWith('ws://')) {
+        const m = raw.match(/access_token=([^&]+)/);
+        return m ? m[1] : raw;
+      }
+      return raw;
+    }
+
+    function showMessage(el, text) {
+      errorMessage.style.display = 'none';
+      successMessage.style.display = 'none';
+      if (el === 'success') {
+        successMessage.textContent = text;
+        successMessage.style.display = 'block';
+      } else {
+        errorMessage.textContent = text;
+        errorMessage.style.display = 'block';
+      }
+    }
+
+    saveBtn.addEventListener('click', () => {
+      const password = passInput.value.trim();
+      const raw = tokenInput.value.trim();
+      if (!password) {
+        showMessage('error', 'Enter the admin password.');
+        return;
+      }
+      if (password !== ADMIN_PASSWORD) {
+        showMessage('error', 'Invalid admin password.');
+        return;
+      }
+      if (!raw) {
+        showMessage('error', 'Paste a token or WS URL before saving.');
+        return;
+      }
+      const token = extractToken(raw);
+      if (!token) {
+        showMessage('error', 'Could not extract a valid access token.');
+        return;
+      }
+      localStorage.setItem('1x_crash_token', raw);
+      showMessage('success', 'Access code updated successfully. Reload the main page to apply it.');
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const saved = localStorage.getItem('1x_crash_token');
+      if (saved) tokenInput.value = saved;
+    });
+  </script>
+</body>
+</html>

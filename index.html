@@ -292,6 +292,30 @@
       display: block
     }
 
+    #access-message {
+      display: none;
+      position: relative;
+      margin: 0 16px 16px;
+      padding: 14px 16px;
+      background: rgba(232, 0, 28, 0.12);
+      border: 1px solid rgba(232, 0, 28, 0.35);
+      border-radius: 14px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    #access-message a {
+      color: #ffb347;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    #access-message:not(.hidden) {
+      display: block;
+    }
+
     /* ─── MAIN PAGE ─── */
     .page {
       position: relative;
@@ -878,7 +902,7 @@
   </script>
 
   <!-- TOKEN MODAL -->
-  <div id="token-modal">
+  <div id="token-modal" class="hidden">
     <div class="token-card">
       <div class="token-card-header" style="gap: 12px; margin-bottom: 12px;">
         <img src="melbet.png" style="height: 22px; width: auto; display: inline-block; vertical-align: middle;" alt="Melbet Logo">
@@ -898,6 +922,8 @@
 
   <!-- RECONNECT BANNER -->
   <div id="reconnect-banner" onclick="showTokenModal()">⚡ WebSocket disconnected — tap to reconnect with a new token</div>
+
+  <div id="access-message" class="access-message hidden"></div>
 
   <!-- MAIN PAGE -->
   <div class="page">
@@ -983,7 +1009,7 @@
     </div>
 
     <div class="page-footer">
-      <button class="exit-btn" onclick="location.href='login.html'">EXIT</button>
+      <button class="exit-btn" onclick="location.href='admin.html'">ADMIN</button>
       <button class="reconnect-btn" onclick="showTokenModal()">NEW TOKEN</button>
     </div>
   </div>
@@ -1038,6 +1064,21 @@
     window.closeHistoryPopup = () => historyOverlay.classList.remove('active');
 
     /* ── Token modal ── */
+    function showAdminConnectMessage(message) {
+      const msgEl = document.getElementById('access-message');
+      if (!msgEl) return;
+      msgEl.innerHTML = `
+        <strong>${message}</strong>
+        <div style="margin-top: 8px;">Contact admin on WhatsApp: <a href="https://wa.me/2348063804264" target="_blank" rel="noopener">+2348063804264</a></div>`;
+      msgEl.classList.remove('hidden');
+    }
+
+    function hideAdminConnectMessage() {
+      const msgEl = document.getElementById('access-message');
+      if (!msgEl) return;
+      msgEl.classList.add('hidden');
+    }
+
     window.showTokenModal = function () {
       tokenModal.classList.remove('hidden');
       tokenError.textContent = '';
@@ -1046,6 +1087,49 @@
     function hideTokenModal() {
       tokenModal.classList.add('hidden');
     }
+
+    function connectFromRaw(raw, suppressMessage = false) {
+      raw = raw.trim();
+      if (!raw) {
+        if (!suppressMessage) {
+          showAdminConnectMessage('No access token set. Message admin to reconnect your bot.');
+        }
+        return;
+      }
+
+      let token = '';
+      let url = '';
+      if (raw.startsWith('wss://') || raw.startsWith('ws://')) {
+        url = raw;
+        const m = raw.match(/access_token=([^&]+)/);
+        token = m ? m[1] : '';
+      } else {
+        token = extractToken(raw);
+        if (token) {
+          url = buildWsUrl(token);
+        }
+      }
+
+      if (!token) {
+        if (!suppressMessage) {
+          tokenError.textContent = '⚠ Could not find access_token. Paste the full WS URL or just the token.';
+        }
+        showAdminConnectMessage('Invalid access token. Message admin to reconnect your bot.');
+        return;
+      }
+
+      localStorage.setItem('1x_crash_token', raw);
+      tokenError.textContent = '';
+      connectBtn.disabled = true;
+      connectBtn.textContent = 'CONNECTING…';
+      hideAdminConnectMessage();
+      logDebug('Initiating connection...', true);
+      connectWebSocket(url, token);
+    }
+
+    window.connectFromModal = function () {
+      connectFromRaw(tokenInput.value, false);
+    };
 
     /* ── Live Monitor Panel Toggle ── */
     window.toggleDebugPanel = function () {
@@ -1177,6 +1261,7 @@
         wsConnected = true;
         handshakeReceived = false;
         hideTokenModal();
+        hideAdminConnectMessage();
         reconnectBanner.classList.remove('show');
         connectBtn.disabled = false;
         connectBtn.textContent = 'CONNECT';
@@ -1240,8 +1325,10 @@
         logDebug(`WS connection closed (Code: ${evt.code}, Reason: ${evt.reason || 'None'})`, true);
 
         if (evt.code === 1008 || evt.code === 4001 || evt.code === 4003) {
-          showWsError('Token expired or invalid. Please paste a new token.');
-          showTokenModal();
+          showWsError('Token expired or invalid. Please contact admin to reconnect your bot.');
+          reconnectBanner.classList.remove('show');
+          setLiveState('disconnected');
+          showAdminConnectMessage('Token expired or invalid. Message admin to reconnect your bot.');
         } else {
           reconnectBanner.classList.add('show');
           setLiveState('disconnected');
@@ -1530,10 +1617,15 @@
       setTimeout(() => predEl.classList.remove('pop'), 500);
     }
 
-    /* ── Init: show token modal on load ── */
+    /* ── Init: load saved token and connect if present ── */
     window.addEventListener('DOMContentLoaded', function () {
       const saved = localStorage.getItem('1x_crash_token');
-      if (saved) tokenInput.value = saved;
+      if (saved) {
+        tokenInput.value = saved;
+        connectFromRaw(saved, true);
+      } else {
+        showAdminConnectMessage('Token not set. Message admin to reconnect your bot.');
+      }
     });
   </script>
 </body>
