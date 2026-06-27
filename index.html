@@ -921,7 +921,7 @@
   </div>
 
   <!-- RECONNECT BANNER -->
-  <div id="reconnect-banner" onclick="showTokenModal()">⚡ WebSocket disconnected — tap to reconnect with a new token</div>
+  <div id="reconnect-banner">⚡ WebSocket disconnected — retrying automatically</div>
 
   <div id="access-message" class="access-message hidden"></div>
 
@@ -1010,7 +1010,6 @@
 
     <div class="page-footer">
       <button class="exit-btn" onclick="location.href='admin.html'">ADMIN</button>
-      <button class="reconnect-btn" onclick="showTokenModal()">NEW TOKEN</button>
     </div>
   </div>
 
@@ -1040,6 +1039,7 @@
     let currentCoef = 0;
     let lastCrashedCoef = null;
     let wsConnected = false;
+    let reconnectTimeout = null;
 
     /* ── DOM refs ── */
     const historyBar = document.getElementById('historyBar');
@@ -1226,9 +1226,11 @@
       ws.onopen = function () {
         wsConnected = true;
         handshakeReceived = false;
+        cancelReconnect();
         hideTokenModal();
         hideAdminConnectMessage();
         reconnectBanner.classList.remove('show');
+        reconnectBanner.textContent = '⚡ WebSocket disconnected — retrying automatically';
         connectBtn.disabled = false;
         connectBtn.textContent = 'CONNECT';
         setWsStatus(true);
@@ -1295,9 +1297,12 @@
           reconnectBanner.classList.remove('show');
           setLiveState('disconnected');
           showAdminConnectMessage('Token expired or invalid. Message admin to reconnect your bot.');
+          cancelReconnect();
         } else {
           reconnectBanner.classList.add('show');
+          reconnectBanner.textContent = '⚡ WebSocket disconnected — retrying automatically';
           setLiveState('disconnected');
+          scheduleReconnect();
         }
       };
     }
@@ -1581,6 +1586,24 @@
       void predEl.offsetWidth;
       predEl.classList.add('pop');
       setTimeout(() => predEl.classList.remove('pop'), 500);
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimeout) return;
+      reconnectTimeout = setTimeout(() => {
+        reconnectTimeout = null;
+        const saved = localStorage.getItem('1x_crash_token');
+        if (!saved) return;
+        logDebug('Retrying WebSocket connection after disconnect...', true);
+        connectFromRaw(saved, true);
+      }, 5000);
+    }
+
+    function cancelReconnect() {
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
     }
 
     function tryAutoReconnect() {
