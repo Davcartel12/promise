@@ -1206,40 +1206,6 @@
     }
 
     /* ── Connect from modal ── */
-    window.connectFromModal = function () {
-      const raw = tokenInput.value.trim();
-      if (!raw) {
-        tokenError.textContent = '⚠ Please paste your access token or WS URL';
-        return;
-      }
-      
-      let token = '';
-      let url = '';
-      
-      if (raw.startsWith('wss://') || raw.startsWith('ws://')) {
-        url = raw;
-        const m = raw.match(/access_token=([^&]+)/);
-        token = m ? m[1] : '';
-      } else {
-        token = extractToken(raw);
-        if (token) {
-          url = buildWsUrl(token);
-        }
-      }
-      
-      if (!token) {
-        tokenError.textContent = '⚠ Could not find access_token. Paste the full WS URL or just the token.';
-        return;
-      }
-      
-      localStorage.setItem('1x_crash_token', raw);
-      tokenError.textContent = '';
-      connectBtn.disabled = true;
-      connectBtn.textContent = 'CONNECTING…';
-      logDebug("Initiating connection...", true);
-      connectWebSocket(url, token);
-    };
-
     /* ── WebSocket connection ── */
     function connectWebSocket(url, token) {
       if (ws) {
@@ -1616,6 +1582,21 @@
       predEl.classList.add('pop');
       setTimeout(() => predEl.classList.remove('pop'), 500);
     }
+
+    function tryAutoReconnect() {
+      if (document.visibilityState !== 'visible') return;
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      const saved = localStorage.getItem('1x_crash_token');
+      if (!saved) return;
+      const raw = saved.trim();
+      const token = extractToken(raw) || '';
+      const url = raw.startsWith('wss://') || raw.startsWith('ws://') ? raw : buildWsUrl(token);
+      if (!token || !url) return;
+      logDebug('Page is visible again. Attempting to restore WebSocket connection...', true);
+      connectFromRaw(saved, true);
+    }
+
+    window.addEventListener('visibilitychange', tryAutoReconnect);
 
     /* ── Init: load saved token and connect if present ── */
     window.addEventListener('DOMContentLoaded', function () {
