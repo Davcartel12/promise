@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lucky Jet Predictor — APNAJ BOT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --primary-color: #FFD700;
+      --secondary-color: #121212;
+      --text-color: #ffffff;
+      --card-bg: rgba(30, 30, 30, 0.8);
+      --highlight-bg: rgba(255, 215, 0, 0.1);
+      --border-radius: 12px;
+      --animation-speed: 0.3s;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Poppins', sans-serif;
+      background-color: #000000;
+      background-image:
+        radial-gradient(circle at 20% 30%, rgba(255, 215, 0, 0.05) 0%, transparent 30%),
+        radial-gradient(circle at 80% 70%, rgba(255, 215, 0, 0.05) 0%, transparent 30%);
+      color: var(--text-color);
+      line-height: 1.6;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    .container.is-blocked { opacity: 0.35; pointer-events: none; filter: grayscale(0.1); }
+    .token-modal {
+      position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.88); padding: 20px;
+      visibility: visible; opacity: 1;
+    }
+    .token-modal.hidden { display: none; }
+    .token-modal-card {
+      width: min(100%, 460px); background: rgba(15, 15, 15, 0.98); border: 2px solid rgba(255, 215, 0, 0.45);
+      border-radius: 18px; padding: 28px; box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .token-modal-card h3 { color: var(--primary-color); margin-bottom: 0; text-align: center; }
+    .token-modal-card p { margin-bottom: 0; text-align: center; color: rgba(255, 255, 255, 0.85); }
+    .token-input {
+      width: 100%; border: 2px solid rgba(255, 255, 255, 0.24); background: rgba(255, 255, 255, 0.14);
+      color: #FFFFFF; border-radius: 12px; padding: 14px 16px; font-size: 1rem;
+    }
+    .token-input::placeholder { color: rgba(255, 255, 255, 0.65); }
+    .token-input:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 4px rgba(255, 215, 0, 0.12); }
+    .token-actions { display: flex; gap: 10px; }
+    .token-btn {
+      flex: 1; padding: 12px; border: none; border-radius: 10px; background: var(--primary-color);
+      color: var(--secondary-color); font-weight: 700; cursor: pointer;
+    }
+    .token-error { min-height: 22px; margin-top: 10px; color: #ff8f8f; font-size: 0.9rem; text-align: center; }
+    header { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; text-align: center; }
+    .logo { width: 200px; margin-bottom: 10px; }
+    h1 { font-size: 2rem; font-weight: 700; color: var(--primary-color); margin-bottom: 10px; }
+    .stats-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+    @media (max-width: 768px) { .stats-container { grid-template-columns: 1fr; } }
+    .stats-card {
+      background: var(--card-bg); border-radius: var(--border-radius); padding: 15px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); transition: transform var(--animation-speed);
+    }
+    .stats-card:hover { transform: translateY(-5px); }
+    .stats-card h3 { color: var(--primary-color); margin-bottom: 15px; text-align: center; font-size: 1.2rem; }
+    .chart-container { height: 150px; margin-bottom: 10px; }
+    .stats-info { display: flex; justify-content: space-between; }
+    .stat { display: flex; flex-direction: column; align-items: center; font-size: 0.9rem; }
+    .stat span:last-child { font-weight: 600; color: var(--primary-color); font-size: 1.1rem; }
+    .analysis-info { display: flex; flex-direction: column; justify-content: center; height: 100%; }
+    .progress-container { margin-bottom: 20px; }
+    .progress-container p { margin-bottom: 8px; text-align: center; }
+    .progress-bar { height: 15px; background-color: rgba(255, 255, 255, 0.1); border-radius: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; background-color: var(--primary-color); width: 0%; transition: width 0.5s ease-in-out; }
+    .status { text-align: center; font-size: 0.9rem; opacity: 0.8; }
+    .prediction-container { margin-bottom: 30px; }
+    .prediction-card {
+      background: var(--card-bg); border-radius: var(--border-radius); padding: 20px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 215, 0, 0.3);
+      position: relative; overflow: hidden;
+    }
+    .prediction-card h2 { color: var(--primary-color); text-align: center; margin-bottom: 20px; font-size: 1.5rem; }
+    .prediction-details { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+    .prediction-time, .prediction-values { background-color: var(--highlight-bg); padding: 15px; border-radius: var(--border-radius); }
+    .highlight { color: var(--primary-color); font-weight: 600; font-size: 1.2rem; }
+    .rocket-animation {
+      position: absolute; top: 50px; right: -30px; width: 60px; opacity: 0.3;
+      transform: rotate(45deg); transition: all 0.5s ease-in-out;
+    }
+    .prediction-card:hover .rocket-animation { opacity: 0.6; transform: rotate(45deg) translate(-15px, -15px); }
+    .generate-btn {
+      display: block; width: 100%; padding: 12px; background-color: var(--primary-color);
+      color: var(--secondary-color); border: none; border-radius: var(--border-radius);
+      font-weight: 600; font-size: 1rem; cursor: pointer; transition: all var(--animation-speed);
+    }
+    .generate-btn:hover { background-color: #ffea00; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4); }
+    .generate-btn:active { transform: translateY(0); }
+    .generate-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    .history-container { background: var(--card-bg); border-radius: var(--border-radius); padding: 20px; }
+    .history-container h3 { color: var(--primary-color); margin-bottom: 15px; text-align: center; }
+    .history-list { display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; }
+    .history-item {
+      background-color: rgba(255, 255, 255, 0.05); padding: 12px; border-radius: var(--border-radius);
+      display: flex; justify-content: space-between; align-items: center; transition: background-color var(--animation-speed);
+    }
+    .history-item:hover { background-color: rgba(255, 255, 255, 0.1); }
+    .history-item .time { font-size: 0.9rem; opacity: 0.8; }
+    .history-item .coef { color: var(--primary-color); font-weight: 600; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+    .pulse { animation: pulse 2s infinite; }
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      .prediction-details { flex-direction: column; }
+      .stats-info { flex-direction: column; align-items: center; gap: 10px; }
+      h1 { font-size: 1.5rem; }
+      .prediction-card h2 { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="token-modal" id="tokenModal" style="display:flex; position:fixed; inset:0; z-index:99999; opacity:1; visibility:visible;">
+    <div class="token-modal-card">
+      <h3>Connexion requise</h3>
+      <p>Entrez votre token d'accès pour charger le flux live et activer la prédiction.</p>
+      <input class="token-input" id="tokenInput" type="text" placeholder="Coller le token ou l'URL WS" autocomplete="off" autocapitalize="none" spellcheck="false" />
+      <div class="token-actions">
+        <button class="token-btn" id="connectBtn">Connecter</button>
+      </div>
+      <p class="token-error" id="tokenError"></p>
+    </div>
+  </div>
+
+  <div class="container" id="pageContainer">
+    <header>
+      <h1>Lucky Jet Predictor</h1>
+      <p>@kingapnaj — APNAJ BOT</p>
+    </header>
+
+    <div class="stats-container">
+      <div class="stats-card">
+        <h3>Tendance des Coefficients</h3>
+        <div class="chart-container">
+          <canvas id="trendChart"></canvas>
+        </div>
+        <div class="stats-info">
+          <div class="stat">
+            <span>Dernier</span>
+            <span id="lastCoef">-</span>
+          </div>
+          <div class="stat">
+            <span>Moyenne (10)</span>
+            <span id="avgCoef">-</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-card">
+        <h3>Analyse en Temps Réel</h3>
+        <div class="analysis-info">
+          <div class="progress-container">
+            <p>Progression de l'analyse</p>
+            <div class="progress-bar">
+              <div class="progress-fill" id="analysisProgress"></div>
+            </div>
+          </div>
+          <p class="status" id="analysisStatus">En attente...</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="prediction-container">
+      <div class="prediction-card" id="predictionCard">
+        <svg class="rocket-animation" id="rocketAnimation" viewBox="0 0 24 24" fill="#FFD700" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2.5c2.5 2 4 5 4 8.5 0 1.5-.3 3-1 4.3l-3 1.7-3-1.7c-.7-1.3-1-2.8-1-4.3 0-3.5 1.5-6.5 4-8.5zM12 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM8 17l-1.5 4L9 19.5M16 17l1.5 4L15 19.5"/>
+        </svg>
+        <h2>Prédiction</h2>
+        <div class="prediction-details">
+          <div class="prediction-time">
+            Time: <span class="highlight" id="timeRange">—:—</span>
+          </div>
+          <div class="prediction-values">
+            Coefficient: <span class="highlight" id="coeffValue">-</span>
+            &nbsp;|&nbsp; Assurance: <span class="highlight" id="assuranceValue">-</span>
+          </div>
+        </div>
+        <button class="generate-btn" id="generateBtn">Générer une Prédiction</button>
+      </div>
+    </div>
+
+    <div class="history-container">
+      <h3>Historique des Prédictions</h3>
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+
+  <script>
+    const PREDICTION_INTERVAL = 300000;
+    const ANALYSIS_TIME = 5000;
+    const MIN_COEF = 6;
+    const MAX_COEF = 15;
+    const MIN_ASSURANCE = 2;
+    const MAX_ASSURANCE = 5.99;
+
+    const timeRangeEl = document.getElementById('timeRange');
+    const coeffValueEl = document.getElementById('coeffValue');
+    const assuranceValueEl = document.getElementById('assuranceValue');
+    const generateBtn = document.getElementById('generateBtn');
+    const historyListEl = document.getElementById('historyList');
+    const analysisProgressEl = document.getElementById('analysisProgress');
+    const analysisStatusEl = document.getElementById('analysisStatus');
+    const lastCoefEl = document.getElementById('lastCoef');
+    const avgCoefEl = document.getElementById('avgCoef');
+    const trendChartEl = document.getElementById('trendChart');
+    const predictionCardEl = document.getElementById('predictionCard');
+    const rocketAnimationEl = document.getElementById('rocketAnimation');
+    const tokenModalEl = document.getElementById('tokenModal');
+    const tokenInputEl = document.getElementById('tokenInput');
+    const connectBtnEl = document.getElementById('connectBtn');
+    const tokenErrorEl = document.getElementById('tokenError');
+    const pageContainerEl = document.getElementById('pageContainer');
+
+    let historicalData = [];
+    let predictionHistory = [];
+    let chart;
+    let ws = null;
+    let reconnectTimeout = null;
+    let currentCoef = 0;
+    let lastFlyTime = null;
+    let lastFlyCoef = null;
+    let flySpeedHistory = [];
+
+    function init() {
+      setupEventListeners();
+      initChart();
+      updatePredictionStats();
+      const saved = localStorage.getItem('1x_crash_token');
+      if (saved) {
+        tokenInputEl.value = saved;
+        showTokenModal('Token chargé. Cliquez sur Connecter pour ouvrir le flux live.');
+        analysisStatusEl.textContent = 'Token sauvegardé trouvé. Vérifiez et connectez.';
+      } else {
+        showTokenModal('Entrez votre token pour connecter le flux live.');
+        analysisStatusEl.textContent = 'Connexion requise.';
+      }
+    }
+
+    function setupEventListeners() {
+      generateBtn.addEventListener('click', startPredictionProcess);
+      connectBtnEl.addEventListener('click', () => {
+        const raw = tokenInputEl.value.trim();
+        connectFromRaw(raw);
+      });
+      tokenInputEl.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          const raw = tokenInputEl.value.trim();
+          connectFromRaw(raw);
+        }
+      });
+      window.addEventListener('visibilitychange', tryAutoReconnect);
+    }
+
+    function showTokenModal(message = '') {
+      tokenModalEl.classList.remove('hidden');
+      tokenModalEl.style.display = 'flex';
+      tokenModalEl.style.visibility = 'visible';
+      tokenModalEl.style.opacity = '1';
+      tokenModalEl.style.zIndex = '100000';
+      tokenErrorEl.textContent = message;
+      if (pageContainerEl) pageContainerEl.classList.add('is-blocked');
+      if (tokenInputEl) {
+        tokenInputEl.focus();
+      }
+    }
+
+    function hideTokenModal() {
+      tokenModalEl.classList.add('hidden');
+      tokenModalEl.style.display = 'none';
+      tokenModalEl.style.visibility = 'hidden';
+      if (pageContainerEl) pageContainerEl.classList.remove('is-blocked');
+    }
+
+    function initChart() {
+      const ctx = trendChartEl.getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Coefficients',
+            data: [],
+            borderColor: '#FFD700',
+            backgroundColor: 'rgba(255, 215, 0, 0.1)',
+            borderWidth: 2,
+            tension: 0.4,
+            pointBackgroundColor: '#FFD700',
+            pointRadius: 3,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: 'rgba(255, 255, 255, 0.7)' }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: 'rgba(255, 255, 255, 0.7)', maxTicksLimit: 5 }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              titleColor: '#FFD700',
+              bodyColor: '#FFFFFF',
+              borderColor: '#FFD700',
+              borderWidth: 1
+            }
+          }
+        }
+      });
+    }
+
+    function updateChart(value) {
+      const time = new Date();
+      const formattedTime = time.getHours().toString().padStart(2, '0') + ':' + time.getMinutes().toString().padStart(2, '0');
+      chart.data.labels.push(formattedTime);
+      chart.data.datasets[0].data.push(value);
+      if (chart.data.labels.length > 12) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      chart.update();
+    }
+
+    function updatePredictionStats() {
+      if (historicalData.length) {
+        const last = historicalData[historicalData.length - 1];
+        lastCoefEl.textContent = last.toFixed(2) + 'x';
+        const recent = historicalData.slice(-10);
+        const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+        avgCoefEl.textContent = avg.toFixed(2) + 'x';
+      } else {
+        lastCoefEl.textContent = '-';
+        avgCoefEl.textContent = '-';
+      }
+      if (analysisProgressEl) {
+        const progress = Math.min(100, Math.max(10, historicalData.length * 3));
+        analysisProgressEl.style.width = progress + '%';
+      }
+    }
+
+    function updatePredictionHistory() {
+      historyListEl.innerHTML = '';
+      const items = predictionHistory.slice(0, 5);
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'history-item';
+        const formattedTime = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        row.innerHTML = '<div><span>' + item.timeRange + '</span></div><div><span class="time">' + formattedTime + '</span><span class="coef">' + item.coefficient + 'x</span></div>';
+        historyListEl.appendChild(row);
+      });
+    }
+
+    // ── Pattern-Analysis Engine ────────────────────────────────────────────────
+    // GOOD_THRESHOLD: minimum coefficient considered a "good" round worth targeting
+    const GOOD_THRESHOLD = 5;
+
+    function analyzeHistory() {
+      // Work on the most recent 100 rounds for pattern detection
+      const data = historicalData.slice(-100);
+      if (data.length < 3) return null;
+
+      // ── 1. Find indices of all "good" rounds ──────────────────────────────
+      const goodIndices = [];
+      for (let i = 0; i < data.length; i++) {
+        if (data[i] >= GOOD_THRESHOLD) goodIndices.push(i);
+      }
+
+      // ── 2. Average gap between good rounds (in rounds) ────────────────────
+      let avgGap = 5; // default fallback
+      if (goodIndices.length >= 2) {
+        const gaps = [];
+        for (let i = 1; i < goodIndices.length; i++) {
+          gaps.push(goodIndices[i] - goodIndices[i - 1]);
+        }
+        avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      }
+
+      // ── 3. How many rounds since last good round? ─────────────────────────
+      const lastGoodIdx = goodIndices.length ? goodIndices[goodIndices.length - 1] : -1;
+      const roundsSinceLastGood = lastGoodIdx >= 0 ? (data.length - 1 - lastGoodIdx) : data.length;
+
+      // ── 4. Estimate rounds until next good round ──────────────────────────
+      //   If we just had a good round (0 rounds ago), the next is ~avgGap away.
+      //   If we're already past the average gap, treat as imminent (1–2 rounds).
+      const roundsUntilNext = Math.max(1, avgGap - roundsSinceLastGood);
+
+      // ── 5. Estimate time per round (seconds) from flySpeedHistory or default
+      //   Average crash game round is ~30–90 s. Use flySpeed data if available.
+      let secPerRound = 45; // default
+      if (flySpeedHistory.length >= 3) {
+        // slower speed → longer round; use inverse relationship
+        const avgSpeed = flySpeedHistory.reduce((a, b) => a + b, 0) / flySpeedHistory.length;
+        secPerRound = Math.max(20, Math.min(120, 60 / Math.max(0.5, avgSpeed)));
+      }
+
+      // ── 6. Minutes from now to predicted round ────────────────────────────
+      const secondsUntilNext = roundsUntilNext * secPerRound;
+      const minutesUntilNext = secondsUntilNext / 60;
+
+      // ── 7. Predicted coefficient (weighted average of recent good rounds) ──
+      const goodValues = goodIndices.map(i => data[i]);
+      // Give more weight to the most recent good rounds
+      let predictedCoef = MIN_COEF;
+      if (goodValues.length > 0) {
+        let weightedSum = 0, totalWeight = 0;
+        for (let i = 0; i < goodValues.length; i++) {
+          const w = i + 1; // recency weight: later items in goodValues array = higher index = more recent
+          weightedSum += goodValues[i] * w;
+          totalWeight += w;
+        }
+        predictedCoef = weightedSum / totalWeight;
+
+        // Nudge upward if we're well overdue (more rounds since last good than average gap)
+        if (roundsSinceLastGood > avgGap) {
+          const overdueRatio = Math.min(1, (roundsSinceLastGood - avgGap) / avgGap);
+          predictedCoef += overdueRatio * 3; // bonus up to +3x when very overdue
+        }
+        predictedCoef = Math.max(MIN_COEF, Math.min(MAX_COEF, predictedCoef));
+      }
+
+      // ── 8. Assurance coefficient (safe floor: lower percentile of good values)
+      //   This is a coefficient that is very likely to appear at that time.
+      //   Use the 25th percentile of observed good values → conservative safe bet.
+      let assurance = MIN_ASSURANCE;
+      if (goodValues.length > 0) {
+        const sorted = [...goodValues].sort((a, b) => a - b);
+        const p25idx = Math.floor(sorted.length * 0.25);
+        assurance = sorted[p25idx];
+        // Cap assurance to always be below predictedCoef
+        assurance = Math.max(MIN_ASSURANCE, Math.min(predictedCoef - 0.5, assurance));
+        assurance = Math.min(MAX_ASSURANCE, assurance);
+      }
+
+      return { minutesUntilNext, predictedCoef, assurance, avgGap, roundsSinceLastGood, roundsUntilNext };
+    }
+
+    function updatePrediction() {
+      if (!historicalData.length) return;
+
+      const analysis = analyzeHistory();
+
+      let minutesUntilNext, predictedCoef, assurance;
+
+      if (analysis) {
+        minutesUntilNext = analysis.minutesUntilNext;
+        predictedCoef    = analysis.predictedCoef;
+        assurance        = analysis.assurance;
+      } else {
+        // Fallback if not enough data
+        minutesUntilNext = 4;
+        predictedCoef    = MIN_COEF;
+        assurance        = MIN_ASSURANCE;
+      }
+
+      // ── Compute predicted time ────────────────────────────────────────────
+      const predictedDate = new Date(Date.now() + Math.round(minutesUntilNext * 60 * 1000));
+      const fmt = (d) => d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+      const t1 = fmt(predictedDate);
+
+      // ── Update DOM ────────────────────────────────────────────────────────
+      timeRangeEl.textContent = t1;
+      coeffValueEl.textContent = predictedCoef.toFixed(2) + 'x';
+      assuranceValueEl.textContent = assurance.toFixed(2) + 'x';
+
+      predictionCardEl.classList.remove('pulse');
+      void predictionCardEl.offsetWidth;
+      predictionCardEl.classList.add('pulse');
+      rocketAnimationEl.style.opacity = '0.8';
+      setTimeout(() => {
+        rocketAnimationEl.style.opacity = '0.3';
+      }, 2200);
+
+      predictionHistory.unshift({
+        timeRange: t1,
+        coefficient: predictedCoef.toFixed(2),
+        assurance: assurance.toFixed(2),
+        timestamp: new Date()
+      });
+      if (predictionHistory.length > 5) predictionHistory.length = 5;
+      updatePredictionHistory();
+    }
+
+    function startPredictionProcess() {
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Analyse en cours...';
+      analysisProgressEl.style.width = '0%';
+      analysisStatusEl.textContent = 'Analyse du flux live...';
+      setTimeout(() => {
+        if (historicalData.length) {
+          updatePrediction();
+          analysisStatusEl.textContent = 'Prédiction prête!';
+        } else {
+          analysisStatusEl.textContent = 'Aucune donnée live reçue pour le moment.';
+        }
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Générer une Prédiction';
+      }, 900);
+    }
+
+    function connectFromRaw(raw, suppressMessage = false) {
+      raw = (raw || '').trim();
+      if (!raw) {
+        tokenErrorEl.textContent = 'Entrez votre token ou l\'URL WS pour vous connecter.';
+        showTokenModal('Entrez votre token ou l\'URL WS pour vous connecter.');
+        return;
+      }
+      let token = '';
+      let url = '';
+      if (raw.startsWith('wss://') || raw.startsWith('ws://')) {
+        url = raw;
+        const m = raw.match(/access_token=([^&]+)/);
+        token = m ? m[1] : '';
+      } else {
+        token = extractToken(raw);
+        if (token) url = buildWsUrl(token);
+      }
+      if (!token) {
+        tokenErrorEl.textContent = 'Token invalide. Veuillez vérifier le contenu fourni.';
+        showTokenModal('Token invalide. Veuillez vérifier le contenu fourni.');
+        return;
+      }
+      localStorage.setItem('1x_crash_token', raw);
+      tokenInputEl.value = raw;
+      hideTokenModal();
+      connectWebSocket(url, token);
+    }
+
+    function connectWebSocket(url, token) {
+      if (ws) {
+        try { ws.close(); } catch (e) {}
+      }
+      let handshakeReceived = false;
+      try {
+        ws = new WebSocket(url);
+      } catch (e) {
+        analysisStatusEl.textContent = 'Erreur de connexion au flux.';
+        return;
+      }
+      ws.onopen = function () {
+        cancelReconnect();
+        hideTokenModal();
+        analysisStatusEl.textContent = 'Flux connecté. Envoi du handshake...';
+        const handshake = { protocol: 'json', version: 1 };
+        ws.send(JSON.stringify(handshake) + String.fromCharCode(30));
+      };
+      ws.onmessage = function (evt) {
+        const payloads = evt.data.split(String.fromCharCode(30));
+        for (const payload of payloads) {
+          if (!payload.trim()) continue;
+          if (!handshakeReceived) {
+            try {
+              const msg = JSON.parse(payload);
+              if (msg && typeof msg === 'object' && Object.keys(msg).length === 0) {
+                handshakeReceived = true;
+                const accountId = getAccountIdFromToken(token);
+                const regMsg = {
+                  arguments: [{ activity: 30, account: accountId }],
+                  invocationId: '1',
+                  target: 'Account',
+                  type: 1
+                };
+                ws.send(JSON.stringify(regMsg) + String.fromCharCode(30));
+                analysisStatusEl.textContent = 'Handshake accepté. En attente des données live...';
+              }
+            } catch (e) {}
+            continue;
+          }
+          try {
+            const msg = JSON.parse(payload);
+            handleSignalRMessage(msg);
+          } catch (e) {}
+        }
+      };
+      ws.onerror = function () {
+        analysisStatusEl.textContent = 'Erreur réseau du flux.';
+        if (!handshakeReceived) {
+          showTokenModal('Connexion impossible. Vérifiez votre token et réessayez.');
+        }
+      };
+      ws.onclose = function () {
+        analysisStatusEl.textContent = 'Flux déconnecté. Reconnexion...';
+        if (!handshakeReceived) {
+          showTokenModal('Déconnexion avant l\'ouverture du flux. Vérifiez votre token.');
+        }
+        scheduleReconnect();
+      };
+    }
+
+    function handleSignalRMessage(msg) {
+      if (!msg) return;
+      if (msg.type === 1) {
+        const target = msg.target;
+        const args = msg.arguments || [];
+        const data = args[0];
+        if (target === 'OnRegistration') {
+          handleOnRegistration(data);
+        } else if (target === 'OnBets') {
+          analysisStatusEl.textContent = 'Phase de mise en jeu détectée.';
+        } else if (target === 'OnFly' || target === 'OnFlight' || target === 'OnFlying' || target === 'OnTick' || target === 'OnCoef' || target === 'OnUpdate') {
+          handleOnFly(data);
+        } else if (target === 'OnCrash' || target === 'OnCrashed' || target === 'OnEnd') {
+          handleOnCrash(data);
+        } else if (target === 'OnStage' || target === 'OnState') {
+          handleOnStage(data);
+        }
+      }
+    }
+
+    function handleOnRegistration(data) {
+      if (!data) return;
+      if (Array.isArray(data.fs) && data.fs.length) {
+        historicalData = data.fs.map(parseCoef).filter(Boolean).reverse();
+        if (historicalData.length) {
+          historicalData.slice(-12).forEach((value) => updateChart(value));
+          updatePredictionStats();
+        }
+      }
+    }
+
+    function handleOnFly(data) {
+      const coef = parseCoef(data);
+      if (coef) {
+        currentCoef = coef;
+        updateLiveFlight(coef);
+        analysisStatusEl.textContent = 'Vol en cours: ' + coef.toFixed(2) + 'x';
+      }
+    }
+
+    function handleOnCrash(data) {
+      const coef = parseCoef(data);
+      if (coef) {
+        historicalData.push(coef);
+        if (historicalData.length > 250) historicalData.shift();
+        updateChart(coef);
+        updatePredictionStats();
+        analysisStatusEl.textContent = 'Crash enregistré: ' + coef.toFixed(2) + 'x';
+      }
+    }
+
+    function handleOnStage(data) {
+      const coef = parseCoef(data);
+      if (coef) {
+        currentCoef = coef;
+        updateLiveFlight(coef);
+      }
+      if (data && (data.s === 4 || data.s === 1)) {
+        handleOnCrash(data);
+      }
+    }
+
+    function updateLiveFlight(coef) {
+      const now = Date.now();
+      if (lastFlyTime && lastFlyCoef && coef > lastFlyCoef) {
+        const dt = (now - lastFlyTime) / 1000;
+        if (dt > 0) {
+          const instantSpeed = (coef - lastFlyCoef) / dt;
+          flySpeedHistory.push(instantSpeed);
+          if (flySpeedHistory.length > 20) flySpeedHistory.shift();
+        }
+      }
+      lastFlyTime = now;
+      lastFlyCoef = coef;
+    }
+
+    function parseCoef(value) {
+      if (!value) return null;
+      const raw = value.k ?? value.coef ?? value.crash ?? value.coefficient ?? value.value ?? value.x ?? value.topCoefficient ?? value.crashPoint ?? value.f ?? value.c ?? value;
+      const n = Number(raw);
+      return (Number.isFinite(n) && n >= 1) ? n : null;
+    }
+
+    function decodeJwt(token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length < 2) return null;
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        return JSON.parse(json);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function getAccountIdFromToken(token) {
+      const payload = decodeJwt(token);
+      if (payload && payload.sub) {
+        const parts = payload.sub.split('/');
+        if (parts.length > 1) {
+          const acc = Number(parts[1]);
+          if (!isNaN(acc)) return acc;
+        }
+        const acc = Number(payload.sub);
+        if (!isNaN(acc)) return acc;
+      }
+      return 1680404931;
+    }
+
+    function extractToken(raw) {
+      raw = raw.trim();
+      if (raw.startsWith('wss://') || raw.startsWith('ws://')) {
+        const m = raw.match(/access_token=([^&]+)/);
+        return m ? m[1] : null;
+      }
+      if (raw.startsWith('eyJ')) return raw;
+      const m = raw.match(/access_token=([^&\s]+)/);
+      return m ? m[1] : null;
+    }
+
+    function buildWsUrl(token) {
+      return 'wss://melbet-ma.com/games-frame/sockets/crash?ref=8&gr=1729&whence=55&fcountry=182&appGuid=games-web-host-b2c-web-v3&lng=fr&v=1.5&access_token=' + token;
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimeout) return;
+      reconnectTimeout = setTimeout(() => {
+        reconnectTimeout = null;
+        const saved = localStorage.getItem('1x_crash_token');
+        if (saved) connectFromRaw(saved, true);
+      }, 5000);
+    }
+
+    function cancelReconnect() {
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
+    }
+
+    function tryAutoReconnect() {
+      if (document.visibilityState !== 'visible') return;
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      const saved = localStorage.getItem('1x_crash_token');
+      if (saved) connectFromRaw(saved, true);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>
