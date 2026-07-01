@@ -202,8 +202,6 @@
     const ANALYSIS_TIME = 5000;
     const MIN_COEF = 6;
     const MAX_COEF = 15;
-    const MIN_ASSURANCE = 2;
-    const MAX_ASSURANCE = 5.99;
 
     const timeRangeEl = document.getElementById('timeRange');
     const coeffValueEl = document.getElementById('coeffValue');
@@ -224,6 +222,7 @@
     const pageContainerEl = document.getElementById('pageContainer');
 
     let historicalData = [];
+    let historicalTimestamps = [];
     let predictionHistory = [];
     let chart;
     let ws = null;
@@ -330,14 +329,44 @@
       });
     }
 
-    function updateChart(value) {
-      const time = new Date();
-      const formattedTime = time.getHours().toString().padStart(2, '0') + ':' + time.getMinutes().toString().padStart(2, '0');
-      chart.data.labels.push(formattedTime);
-      chart.data.datasets[0].data.push(value);
-      if (chart.data.labels.length > 12) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
+    function reconstructTimestamps() {
+      historicalTimestamps = new Array(historicalData.length);
+      if (historicalData.length === 0) return;
+      
+      // Let's assume the last crash happened 4 seconds ago
+      let lastCrash = Date.now() - 4000;
+      historicalTimestamps[historicalData.length - 1] = lastCrash;
+      
+      for (let i = historicalData.length - 2; i >= 0; i--) {
+        const nextCoef = historicalData[i + 1];
+        // Flight time: 6.0 * ln(nextCoef)
+        const flightTimeMs = (6.0 * Math.log(Math.max(1.0, nextCoef))) * 1000;
+        // Interval between crash_i and flight start_ip1 is 12.5 seconds
+        const prevCrash = lastCrash - flightTimeMs - 12500;
+        
+        historicalTimestamps[i] = prevCrash;
+        lastCrash = prevCrash;
+      }
+    }
+
+    function rebuildChart() {
+      if (!chart) return;
+      chart.data.labels = [];
+      chart.data.datasets[0].data = [];
+      
+      const count = Math.min(12, historicalData.length);
+      const startIndex = historicalData.length - count;
+      
+      for (let i = startIndex; i < historicalData.length; i++) {
+        const coef = historicalData[i];
+        const timestamp = historicalTimestamps[i] || Date.now();
+        const d = new Date(timestamp);
+        const formattedTime = d.getHours().toString().padStart(2, '0') + ':' + 
+                              d.getMinutes().toString().padStart(2, '0') + ':' + 
+                              d.getSeconds().toString().padStart(2, '0');
+        
+        chart.data.labels.push(formattedTime);
+        chart.data.datasets[0].data.push(coef);
       }
       chart.update();
     }
@@ -439,17 +468,44 @@
         predictedCoef = Math.max(MIN_COEF, Math.min(MAX_COEF, predictedCoef));
       }
 
-      // ── 8. Assurance coefficient (safe floor: lower percentile of good values)
-      //   This is a coefficient that is very likely to appear at that time.
-      //   Use the 25th percentile of observed good values → conservative safe bet.
-      let assurance = MIN_ASSURANCE;
-      if (goodValues.length > 0) {
-        const sorted = [...goodValues].sort((a, b) => a - b);
-        const p25idx = Math.floor(sorted.length * 0.25);
-        assurance = sorted[p25idx];
-        // Cap assurance to always be below predictedCoef
-        assurance = Math.max(MIN_ASSURANCE, Math.min(predictedCoef - 0.5, assurance));
-        assurance = Math.min(MAX_ASSURANCE, assurance);
+      // ── 8. Assurance coefficient (data-driven, bounded 2.00x – 5.99x)
+      //   We analyze the recent 30 rounds (both good and bad) to assess crash risk.
+      //   If there are many low crashes (under 2.00x), the safety factor drops, making the assurance safer (closer to 2.00x).
+      const MIN_ASSURANCE = 2.00;
+      const MAX_ASSURANCE = 5.99;
+      
+      const recentAll = historicalData.slice(-30);
+      let lowCrashCount = 0;
+      let sumCoef = 0;
+      const totalRecent = recentAll.length;
+      
+      for (const val of recentAll) {
+        if (val < 2.00) lowCrashCount++;
+        sumCoef += val;
+      }
+      
+      const lowCrashRate = totalRecent > 0 ? lowCrashCount / totalRecent : 0.4;
+      const avgRecent = totalRecent > 0 ? sumCoef / totalRecent : 3.0;
+      
+      // Calculate safety factor based on the low crash rate
+      const safetyFactor = Math.max(0, 1 - (lowCrashRate * 1.5));
+      
+      // Base assurance starts as a fraction of the predicted coefficient
+      let rawAssurance = predictedCoef * (0.22 + safetyFactor * 0.22);
+      
+      // Adjust based on the average of recent rounds
+      if (avgRecent > 5) {
+        rawAssurance += 0.5;
+      } else if (avgRecent < 3) {
+        rawAssurance -= 0.5;
+      }
+      
+      // Strict clamp within [2.00, 5.99]
+      let assurance = Math.max(MIN_ASSURANCE, Math.min(MAX_ASSURANCE, rawAssurance));
+      
+      // Ensure assurance is always logically below the predicted coefficient with a safety margin
+      if (assurance >= predictedCoef - 1.5) {
+        assurance = Math.max(MIN_ASSURANCE, predictedCoef - 1.5);
       }
 
       return { minutesUntilNext, predictedCoef, assurance, avgGap, roundsSinceLastGood, roundsUntilNext };
@@ -470,7 +526,7 @@
         // Fallback if not enough data
         minutesUntilNext = 4;
         predictedCoef    = MIN_COEF;
-        assurance        = MIN_ASSURANCE;
+        assurance        = 2.0;
       }
 
       // ── Compute predicted time ────────────────────────────────────────────
@@ -632,7 +688,8 @@
       if (Array.isArray(data.fs) && data.fs.length) {
         historicalData = data.fs.map(parseCoef).filter(Boolean).reverse();
         if (historicalData.length) {
-          historicalData.slice(-12).forEach((value) => updateChart(value));
+          reconstructTimestamps();
+          rebuildChart();
           updatePredictionStats();
         }
       }
@@ -650,9 +707,19 @@
     function handleOnCrash(data) {
       const coef = parseCoef(data);
       if (coef) {
+        const last = historicalData[historicalData.length - 1];
+        const lastTime = historicalTimestamps[historicalTimestamps.length - 1];
+        if (last === coef && lastTime && (Date.now() - lastTime < 2000)) {
+          return;
+        }
+
         historicalData.push(coef);
         if (historicalData.length > 250) historicalData.shift();
-        updateChart(coef);
+        
+        historicalTimestamps.push(Date.now());
+        if (historicalTimestamps.length > 250) historicalTimestamps.shift();
+        
+        rebuildChart();
         updatePredictionStats();
         analysisStatusEl.textContent = 'Crash enregistré: ' + coef.toFixed(2) + 'x';
       }
